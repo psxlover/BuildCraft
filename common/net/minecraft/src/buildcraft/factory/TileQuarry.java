@@ -20,6 +20,7 @@ import net.minecraft.src.EntityItem;
 import net.minecraft.src.EntityPlayer;
 import net.minecraft.src.ItemStack;
 import net.minecraft.src.NBTTagCompound;
+import net.minecraft.src.World;
 import net.minecraft.src.buildcraft.api.APIProxy;
 import net.minecraft.src.buildcraft.api.BuildCraftAPI;
 import net.minecraft.src.buildcraft.api.IAreaProvider;
@@ -244,10 +245,12 @@ public class TileQuarry extends TileMachine implements IArmListener,
 		if (y > diggingY || 
 			(y == diggingY && ((diggingY % 2 == 0 && x < targetX) || (diggingY % 2 == 1 && x > targetX) ||
 							   (x == targetX && ((targetX % 2 == diggingY % 2 && z > targetZ) || (targetX % 2 != diggingY % 2 && z < targetZ)))))) {
-			arm.setTarget(x, y + 1, z);
-			targetX = (int) arm.targetX;
-			targetY = (int) arm.targetY;
-			targetZ = (int) arm.targetZ;
+			targetX = x;
+			targetY = y + 1;
+			targetZ = z;
+			if (arm != null) {
+				arm.setTarget(targetX, targetY, targetZ);
+			}
 		}
 
 		return false;
