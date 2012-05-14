@@ -21,9 +21,11 @@ import net.minecraft.src.World;
 import net.minecraft.src.buildcraft.api.Orientations;
 import net.minecraft.src.buildcraft.api.Position;
 import net.minecraft.src.buildcraft.core.Utils;
+import net.minecraft.src.forge.ISetBlockHandler;
 import net.minecraft.src.forge.ITextureProvider;
+import net.minecraft.src.forge.MinecraftForge;
 
-public class BlockQuarry extends BlockMachineRoot implements
+public class BlockQuarry extends BlockMachineRoot implements ISetBlockHandler,
 		ITextureProvider {
 	
 	int textureTop;
@@ -41,6 +43,7 @@ public class BlockQuarry extends BlockMachineRoot implements
 		textureFront = 2 * 16 + 7;
 		textureTop = 2 * 16 + 8;	
 		
+		MinecraftForge.registerSetBlockHandler(this);
 	}
     
 	@Override
@@ -160,5 +163,15 @@ public class BlockQuarry extends BlockMachineRoot implements
 	@Override
 	public void addCreativeItems(ArrayList itemList) {
 		itemList.add(new ItemStack(this));
+	}
+
+	@Override
+	public boolean onBlockBeingPlaced(World w, int x, int y, int z, int blockID, int metadata) {
+		for (TileQuarry tq : TileQuarry.loadedQuarryTiles) {
+			if (tq.onBlockBeingPlaced(w, x, y, z, blockID)) {
+                return true;
+            }
+        }
+        return false;
 	}
 }

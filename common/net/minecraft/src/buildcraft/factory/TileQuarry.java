@@ -45,6 +45,9 @@ import net.minecraft.src.buildcraft.core.network.PacketUpdate;
 public class TileQuarry extends TileMachine implements IArmListener,
 		IMachine, IPowerReceptor, IPipeConnection, IBuilderInventory {
 	
+	//A list with all the quarry entities in the memory
+	static ArrayList<TileQuarry> loadedQuarryTiles = new ArrayList<TileQuarry>();
+	
 	boolean isDigging = false;
 	
 	public @TileNetworkData Box box = new Box ();
@@ -69,6 +72,8 @@ public class TileQuarry extends TileMachine implements IArmListener,
 	public TileQuarry() {
 		powerProvider = PowerFramework.currentFramework.createPowerProvider();
 		powerProvider.configure(20, 25, 25, 25, MAX_ENERGY);
+
+		loadedQuarryTiles.add(this);
 	}
 	
     public void createUtilsIfNeeded () {
@@ -214,19 +219,59 @@ public class TileQuarry extends TileMachine implements IArmListener,
 			sendNetworkUpdate ();
 		}
 	}
+	
+	// Checks if a block was placed within the quarry limits and before the head.
+	// If so it sets the target to the block placed.
+	// Also prevents users from placing blocks on the top 2 layers of the quarry
+	public boolean onBlockBeingPlaced(World w, int x, int y, int z, int blockID) {
+		if (this.isInvalid()) {
+			System.err.printf("Invalid block\n");
+			return false;
+		}
 
-	public boolean findTarget (boolean doSet) {
+		// If the block wasn't placed within quarry limits return
+		if (blockID == 0 || this.worldObj != w || x > box.xMax - 1 || x < box.xMin + 1 || z > box.zMax - 1 || z < box.zMin + 1 || y > box.yMax) {	//TODO check coordinates
+			return false;
+		}
+
+		// Prevent blocks from being placed on the top 2 layers of the quarry
+		if (y <= box.yMax && y >= box.yMax - 1) {
+			return true;
+		}
+
+		int diggingY = targetY - 1;
+
+		if (y > diggingY || 
+			(y == diggingY && ((diggingY % 2 == 0 && x < targetX) || (diggingY % 2 == 1 && x > targetX) ||
+							   (x == targetX && ((targetX % 2 == diggingY % 2 && z > targetZ) || (targetX % 2 != diggingY % 2 && z < targetZ)))))) {
+			arm.setTarget(x, y + 1, z);
+			targetX = (int) arm.targetX;
+			targetY = (int) arm.targetY;
+			targetZ = (int) arm.targetZ;
+		}
+
+		return false;
+	}
+
+	public boolean findTarget(boolean doSet) {
 		boolean[][] blockedColumns = new boolean[bluePrintBuilder.bluePrint.sizeX - 2][bluePrintBuilder.bluePrint.sizeZ - 2];
-		
+		int startY;
+
 		for (int searchX = 0; searchX < bluePrintBuilder.bluePrint.sizeX - 2; ++searchX) {
 			for (int searchZ = 0; searchZ < bluePrintBuilder.bluePrint.sizeZ - 2; ++searchZ) {
-				blockedColumns [searchX][searchZ] = false;
+				blockedColumns[searchX][searchZ] = false;
 			}
 		}
+
+		if (targetY == 0) {
+			startY = box.yMax - 1;
+		} else {
+			startY = targetY - 1;
+		}
 		
-		for (int searchY = yCoord + 3; searchY >= 0; --searchY) {
+		for (int searchY = startY; searchY >= 0; --searchY) {
 			int startX, endX, incX;
-			
+
 			if (searchY % 2 == 0) {
 				startX = 0;
 				endX = bluePrintBuilder.bluePrint.sizeX - 2;
@@ -236,10 +281,10 @@ public class TileQuarry extends TileMachine implements IArmListener,
 				endX = -1;
 				incX = -1;
 			}
-			
-			for (int searchX = startX; searchX != endX; searchX += incX) {
+
+			for (int searchX = (searchY == startY ? targetX - box.xMin - 1 : startX); searchX != endX; searchX += incX) {
 				int startZ, endZ, incZ;
-				
+
 				if (searchX % 2 == searchY % 2) {
 					startZ = 0;
 					endZ = bluePrintBuilder.bluePrint.sizeZ - 2;
@@ -249,25 +294,25 @@ public class TileQuarry extends TileMachine implements IArmListener,
 					endZ = -1;
 					incZ = -1;
 				}
-								
-				for (int searchZ = startZ; searchZ != endZ; searchZ += incZ) {
-					if (!blockedColumns [searchX][searchZ]) {
+
+				for (int searchZ = (searchY == startY && searchX == targetX - box.xMin - 1 ? targetZ - box.zMin - 1 : startZ); searchZ != endZ; searchZ += incZ) {
+					if (!blockedColumns[searchX][searchZ]) {
 						int bx = box.xMin + searchX + 1, by = searchY, bz = box.zMin
-								+ searchZ + 1;
-						
+																			+ searchZ + 1;
+
 						int blockId = worldObj.getBlockId(bx, by, bz);
-						
-						if (blockDig (blockId)) {		
-							blockedColumns [searchX][searchZ] = true;						
+
+						if (blockDig(blockId)) {
+							blockedColumns[searchX][searchZ] = true;
 						} else if (canDig(blockId)) {
 							if (doSet) {
-								arm.setTarget (bx, by + 1, bz);
+								arm.setTarget(bx, by + 1, bz);
 
 								targetX = (int) arm.targetX;
 								targetY = (int) arm.targetY;
 								targetZ = (int) arm.targetZ;
 							}
-							
+
 							return true;
 						}
 					}
@@ -448,6 +493,7 @@ public class TileQuarry extends TileMachine implements IArmListener,
 	@Override
 	public void invalidate () {		
 		destroy ();
+		loadedQuarryTiles.remove(this);
 	}
 	
 	@Override
@@ -489,11 +535,11 @@ public class TileQuarry extends TileMachine implements IArmListener,
 					yCoord + 4, zCoord + 10);
 			
 			useDefault = true;
+			
+			xSize = a.xMax() - a.xMin() + 1;
+			ySize = a.yMax() - a.yMin() + 1;
+			zSize = a.zMax() - a.zMin() + 1;
 		}
-		
-		xSize = a.xMax() - a.xMin() + 1;
-		ySize = a.yMax() - a.yMin() + 1;
-		zSize = a.zMax() - a.zMin() + 1;
 		
 		box.initialize(a);
 		
@@ -530,6 +576,11 @@ public class TileQuarry extends TileMachine implements IArmListener,
 			box.initialize(xMin, yCoord, zMin, xMin + xSize - 1, yCoord + ySize
 					- 1, zMin + zSize - 1);
 		}				
+		
+		//Initialize target
+		targetX = box.xMin;
+		targetZ = box.zMin;
+		targetY = 0;
 		
 		a.removeFromWorld();
 	}
